@@ -1,0 +1,27 @@
+{
+  "name": "Subscriber Portal — Gestion des abonnements",
+  "short_name": "Abonnements",
+  "description": "Gérez vos abonnements, factures et paiements directement depuis votre téléphone.",
+  "start_url": "/dashboard",
+  "id": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0E1116",
+  "theme_color": "#0E1116",
+  "lang": "fr",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Mon compte",
+      "short_name": "Compte",
+      "url": "/account",
+      "description": "Voir mes abonnements et factures"
+    }
+  ]
+}

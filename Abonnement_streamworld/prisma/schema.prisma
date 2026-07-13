@@ -1,0 +1,159 @@
+// Prisma schema — Subscriber & Billing Management Platform
+// Scope: user accounts, plan subscriptions billed via Stripe, admin roles,
+// login-session security (2FA, revoke-a-session), audit logging, notifications.
+// This schema intentionally does NOT include any content-access "license key" /
+// device-fingerprint-lock system for gating streamed media — see README.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  SUPPORT
+  CUSTOMER
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  PENDING_PAYMENT
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum NotificationChannel {
+  EMAIL
+  PUSH
+  SMS
+}
+
+enum PaymentProvider {
+  STRIPE
+  FEDAPAY
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  phone         String?
+  country       String?
+  city          String?
+  avatarUrl     String?
+  passwordHash  String
+  role          Role      @default(CUSTOMER)
+  twoFactorSecret String?
+  twoFactorEnabled Boolean @default(false)
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  // Admin-side account disable (support/abuse action), distinct from a
+  // subscription being canceled/expired. A disabled user can no longer log
+  // in (checked in /api/auth/login) but their historical data is untouched.
+  disabledAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  subscriptions Subscription[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+}
+
+model Plan {
+  id            String   @id @default(uuid())
+  name          String   // e.g. "Starter", "Pro", "Business"
+  description   String?
+  priceCents    Int
+  currency      String   @default("USD")
+  intervalDays  Int      // billing interval, e.g. 30, 90, 365
+  stripePriceId String?  @unique
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                   String             @id @default(uuid())
+  user                 User               @relation(fields: [userId], references: [id])
+  userId               String
+  plan                 Plan               @relation(fields: [planId], references: [id])
+  planId               String
+  status               SubscriptionStatus @default(TRIALING)
+  paymentProvider      PaymentProvider    @default(STRIPE)
+  stripeSubscriptionId String?            @unique
+  stripeCustomerId     String?
+  // Mobile Money has no silent auto-debit: each billing period is a fresh
+  // FedaPay transaction the customer approves on their phone. This tracks
+  // the transaction currently awaiting/confirming payment for this sub.
+  fedapayTransactionId String?            @unique
+  currentPeriodStart   DateTime           @default(now())
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  invoices Invoice[]
+}
+
+model Invoice {
+  id             String       @id @default(uuid())
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id])
+  subscriptionId String
+  amountCents    Int
+  currency       String       @default("USD")
+  status         String       // paid, open, void, uncollectible
+  provider       PaymentProvider @default(STRIPE)
+  stripeInvoiceId String?     @unique
+  fedapayTransactionId String? @unique
+  issuedAt       DateTime     @default(now())
+  paidAt         DateTime?
+}
+
+// A login session for the web app itself (browser/device the customer used to
+// sign in to their account). Purely an account-security feature — "see where
+// you're signed in and revoke a session" — not a content-access gate.
+model Session {
+  id            String   @id @default(uuid())
+  user          User     @relation(fields: [userId], references: [id])
+  userId        String
+  userAgent     String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  revokedAt     DateTime?
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actor     User?    @relation(fields: [actorId], references: [id])
+  actorId   String?
+  action    String   // e.g. "subscription.canceled", "user.role_changed"
+  target    String?  // free-text reference to the affected entity
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String              @id @default(uuid())
+  user      User                @relation(fields: [userId], references: [id])
+  userId    String
+  channel   NotificationChannel
+  template  String              // e.g. "subscription_created", "trial_ending_3d"
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+}
+
+model Setting {
+  key   String @id
+  value Json
+}

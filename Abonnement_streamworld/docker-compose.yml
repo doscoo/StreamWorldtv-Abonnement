@@ -1,0 +1,35 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: subscriber_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d subscriber_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      # Overrides the .env value: from inside this container the DB is
+      # reachable at the "db" service name, not "localhost".
+      DATABASE_URL: "postgresql://user:password@db:5432/subscriber_portal"
+    ports:
+      - "3000:3000"
+
+volumes:
+  db_data:
